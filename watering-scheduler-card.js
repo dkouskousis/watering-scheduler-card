@@ -1,4 +1,4 @@
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.1.1";
 
 class WateringSchedulerCard extends HTMLElement {
   static getStubConfig() {
@@ -73,6 +73,7 @@ class WateringSchedulerCard extends HTMLElement {
         manual: "Manual",
         auto: "Auto",
         autoHint: "Automatically adjusted using the weather forecast",
+        modeHelp: "Manual uses the selected duration. Auto adjusts the duration according to the weather.",
         history: "Last watering runs",
         noHistory: "No watering history found",
         loading: "Loading history…",
@@ -95,6 +96,7 @@ class WateringSchedulerCard extends HTMLElement {
       manual: "Manual",
       auto: "Auto",
       autoHint: "Αυτόματη προσαρμογή από την πρόγνωση καιρού",
+      modeHelp: "Manual: χρησιμοποιεί τη διάρκεια που επιλέγεις. Auto: προσαρμόζει τη διάρκεια ανάλογα με τον καιρό.",
       history: "Τελευταία ποτίσματα",
       noHistory: "Δεν βρέθηκε ιστορικό ποτίσματος",
       loading: "Φόρτωση ιστορικού…",
@@ -151,7 +153,44 @@ class WateringSchedulerCard extends HTMLElement {
     if (!state) return "";
     const temperature = state.attributes.temperature;
     const unit = state.attributes.temperature_unit || "°C";
-    return temperature === undefined ? state.state : `${temperature}${unit}`;
+    const condition = String(state.state || "").toLowerCase();
+    const conditions = this._config.language === "en" ? {
+      "clear-night": "Clear night",
+      cloudy: "Cloudy",
+      exceptional: "Exceptional weather",
+      fog: "Fog",
+      hail: "Hail",
+      lightning: "Thunderstorms",
+      "lightning-rainy": "Thunderstorms with rain",
+      partlycloudy: "Partly cloudy",
+      pouring: "Heavy rain",
+      rainy: "Rain",
+      snowy: "Snow",
+      "snowy-rainy": "Sleet",
+      sunny: "Sunny",
+      windy: "Windy",
+      "windy-variant": "Windy and cloudy",
+    } : {
+      "clear-night": "Καθαρός ουρανός",
+      cloudy: "Συννεφιά",
+      exceptional: "Ακραία καιρικά φαινόμενα",
+      fog: "Ομίχλη",
+      hail: "Χαλάζι",
+      lightning: "Καταιγίδα",
+      "lightning-rainy": "Καταιγίδα με βροχή",
+      partlycloudy: "Μερική συννεφιά",
+      pouring: "Έντονη βροχή",
+      rainy: "Βροχή",
+      snowy: "Χιόνι",
+      "snowy-rainy": "Χιονόνερο",
+      sunny: "Ηλιοφάνεια",
+      windy: "Άνεμος",
+      "windy-variant": "Άνεμος με συννεφιά",
+    };
+    const parts = [];
+    if (temperature !== undefined && temperature !== null) parts.push(`${temperature}${unit}`);
+    if (conditions[condition]) parts.push(conditions[condition]);
+    return parts.join(" · ");
   }
 
   async _toggleDay(index) {
@@ -334,6 +373,7 @@ class WateringSchedulerCard extends HTMLElement {
               <button class="mode-button ${isAuto ? "" : "selected"}" data-mode="${this._config.manual_value}">${labels.manual}</button>
               <button class="mode-button ${isAuto ? "selected" : ""}" data-mode="${this._config.auto_value}">${labels.auto}</button>
             </div>
+            <div class="mode-help"><ha-icon icon="mdi:information-outline"></ha-icon><span>${labels.modeHelp}</span></div>
             ${isAuto ? `<div class="auto-hint"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon>${labels.autoHint}${weather ? ` · ${weather}` : ""}</div>` : ""}
           </div>
         ` : ""}
@@ -380,7 +420,7 @@ class WateringSchedulerCard extends HTMLElement {
       <style>
         ha-card.watering-card { padding:20px; overflow:hidden; transition:opacity 180ms ease; }
         ha-card.disabled .days, ha-card.disabled .control-grid, ha-card.disabled .mode-wrap { opacity:.48; }
-        .header,.heading,.control span,.auto-hint,.history-date,.history-header { display:flex; align-items:center; }
+        .header,.heading,.control span,.mode-help,.auto-hint,.history-date,.history-header { display:flex; align-items:center; }
         .header { justify-content:space-between; gap:16px; margin-bottom:18px; }
         .heading { min-width:0; gap:13px; }
         .heading > ha-icon { --mdc-icon-size:28px; color:var(--primary-color); flex:0 0 auto; }
@@ -391,7 +431,9 @@ class WateringSchedulerCard extends HTMLElement {
         .mode-selector { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; border-radius:14px; background:var(--secondary-background-color); }
         .mode-button { min-height:40px; border:0; border-radius:11px; background:transparent; color:var(--secondary-text-color); font:inherit; font-weight:600; cursor:pointer; }
         .mode-button.selected { background:var(--card-background-color,var(--ha-card-background)); color:var(--primary-color); box-shadow:0 1px 5px rgba(0,0,0,.14); }
-        .auto-hint { gap:6px; margin:8px 4px 0; }
+        .mode-help { align-items:flex-start; gap:6px; margin:9px 4px 0; color:var(--secondary-text-color); font-size:12px; line-height:1.4; }
+        .mode-help ha-icon { --mdc-icon-size:17px; flex:0 0 auto; margin-top:1px; }
+        .auto-hint { gap:6px; margin:6px 4px 0; }
         .auto-hint ha-icon { --mdc-icon-size:17px; }
         .days { display:grid; grid-template-columns:repeat(7,1fr); gap:7px; margin-bottom:22px; transition:opacity 180ms ease; }
         .day { appearance:none; min-width:0; min-height:44px; border:1px solid var(--divider-color); border-radius:14px; background:var(--secondary-background-color); color:var(--secondary-text-color); font:inherit; font-size:14px; font-weight:600; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:background 140ms ease,color 140ms ease,border-color 140ms ease,transform 80ms ease; }

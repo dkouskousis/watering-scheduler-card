@@ -1,6 +1,6 @@
 # Watering Scheduler Card
 
-Mobile-friendly Home Assistant dashboard card for choosing watering days, start time, duration, Manual/Auto mode and enabled state. It can also show the 10 most recent watering runs from Home Assistant history.
+Mobile-friendly Home Assistant dashboard card for choosing watering days, start time, duration, Manual/Auto mode and enabled state. Auto mode displays the current temperature and translated weather condition. The card can also show the 10 most recent watering runs from Home Assistant history.
 
 The seven selected days are stored as a single number from `0` to `127`, so each watering controller needs only one additional helper.
 
