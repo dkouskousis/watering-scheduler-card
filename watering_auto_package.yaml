@@ -1,0 +1,365 @@
+input_number:
+  watering_front_balcony_dry_threshold: &dry_threshold
+    name: Front balcony dry threshold
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial: 30
+  watering_front_balcony_wet_threshold: &wet_threshold
+    name: Front balcony wet threshold
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial: 55
+  watering_front_balcony_saturation_threshold: &saturation_threshold
+    name: Front balcony safety wet limit
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial: 80
+  watering_front_balcony_ideal_duration: &ideal_duration
+    name: Front balcony ideal dry-to-wet duration
+    min: 1
+    max: 60
+    step: 1
+    unit_of_measurement: min
+    initial: 10
+  watering_front_balcony_conflict_percentage: &conflict_percentage
+    name: Front balcony conflict watering
+    min: 10
+    max: 80
+    step: 5
+    unit_of_measurement: "%"
+    initial: 40
+  watering_front_balcony_min_duration: &min_duration
+    name: Front balcony minimum Auto duration
+    min: 1
+    max: 30
+    step: 1
+    unit_of_measurement: min
+    initial: 2
+  watering_front_balcony_max_duration: &max_duration
+    name: Front balcony maximum Auto duration
+    min: 2
+    max: 90
+    step: 1
+    unit_of_measurement: min
+    initial: 20
+  watering_front_balcony_rain_threshold: &rain_threshold
+    name: Front balcony rain postponement threshold
+    min: 0
+    max: 20
+    step: 0.5
+    unit_of_measurement: mm
+    initial: 2
+  watering_front_balcony_auto_duration: &auto_duration
+    name: Front balcony calculated Auto duration
+    min: 0
+    max: 90
+    step: 1
+    unit_of_measurement: min
+    initial: 0
+
+  watering_back_balcony_dry_threshold:
+    <<: *dry_threshold
+    name: Back balcony dry threshold
+  watering_back_balcony_wet_threshold:
+    <<: *wet_threshold
+    name: Back balcony wet threshold
+  watering_back_balcony_saturation_threshold:
+    <<: *saturation_threshold
+    name: Back balcony safety wet limit
+  watering_back_balcony_ideal_duration:
+    <<: *ideal_duration
+    name: Back balcony ideal dry-to-wet duration
+  watering_back_balcony_conflict_percentage:
+    <<: *conflict_percentage
+    name: Back balcony conflict watering
+  watering_back_balcony_min_duration:
+    <<: *min_duration
+    name: Back balcony minimum Auto duration
+  watering_back_balcony_max_duration:
+    <<: *max_duration
+    name: Back balcony maximum Auto duration
+  watering_back_balcony_rain_threshold:
+    <<: *rain_threshold
+    name: Back balcony rain postponement threshold
+  watering_back_balcony_auto_duration:
+    <<: *auto_duration
+    name: Back balcony calculated Auto duration
+
+input_select:
+  watering_front_balcony_exposure: &exposure
+    name: Front balcony rain exposure
+    options:
+      - Εκτεθειμένο
+      - Μερικώς στεγασμένο
+      - Πλήρως στεγασμένο
+    initial: Πλήρως στεγασμένο
+  watering_front_balcony_weather_sensitivity: &weather_sensitivity
+    name: Front balcony weather sensitivity
+    options:
+      - Χαμηλή
+      - Κανονική
+      - Υψηλή
+    initial: Κανονική
+  watering_front_balcony_sensor_failure: &sensor_failure
+    name: Front balcony sensor failure action
+    options:
+      - Ακύρωση
+      - Καιρός με περιορισμό
+    initial: Ακύρωση
+
+  watering_back_balcony_exposure:
+    <<: *exposure
+    name: Back balcony rain exposure
+  watering_back_balcony_weather_sensitivity:
+    <<: *weather_sensitivity
+    name: Back balcony weather sensitivity
+  watering_back_balcony_sensor_failure:
+    <<: *sensor_failure
+    name: Back balcony sensor failure action
+
+input_text:
+  watering_front_balcony_auto_reason:
+    name: Front balcony last Auto decision
+    max: 255
+  watering_back_balcony_auto_reason:
+    name: Back balcony last Auto decision
+    max: 255
+
+script:
+  watering_auto_run_zone:
+    alias: Watering - calculate and run Auto zone
+    mode: parallel
+    max: 2
+    sequence:
+      - choose:
+          - conditions: "{{ states(mode_entity) == 'Manual' }}"
+            sequence:
+              - variables:
+                  run_minutes: "{{ states(manual_duration_entity) | int(1) }}"
+              - action: input_number.set_value
+                target:
+                  entity_id: "{{ auto_duration_entity }}"
+                data:
+                  value: "{{ run_minutes }}"
+              - action: input_text.set_value
+                target:
+                  entity_id: "{{ reason_entity }}"
+                data:
+                  value: "Manual · {{ run_minutes }} λεπτά"
+              - action: homeassistant.turn_on
+                target:
+                  entity_id: "{{ valve_entity }}"
+              - delay:
+                  minutes: "{{ run_minutes }}"
+              - action: homeassistant.turn_off
+                target:
+                  entity_id: "{{ valve_entity }}"
+        default:
+          - action: weather.get_forecasts
+            target:
+              entity_id: "{{ weather_entity }}"
+            data:
+              type: hourly
+            response_variable: watering_weather
+          - variables:
+              m1_state: "{{ states(moisture_entity_1) }}"
+              m2_state: "{{ states(moisture_entity_2) }}"
+              m1_valid: "{{ states(moisture_entity_1) not in ['unknown', 'unavailable', 'none', ''] }}"
+              m2_valid: "{{ states(moisture_entity_2) not in ['unknown', 'unavailable', 'none', ''] }}"
+              m1: "{{ states(moisture_entity_1) | float(0) }}"
+              m2: "{{ states(moisture_entity_2) | float(0) }}"
+              dry: "{{ states(dry_threshold_entity) | float(30) }}"
+              wet: "{{ states(wet_threshold_entity) | float(55) }}"
+              saturated: "{{ states(saturation_threshold_entity) | float(80) }}"
+              ideal: "{{ states(ideal_duration_entity) | float(10) }}"
+              conflict_ratio: "{{ states(conflict_percentage_entity) | float(40) / 100 }}"
+              minimum: "{{ states(min_duration_entity) | float(2) }}"
+              maximum: "{{ states(max_duration_entity) | float(20) }}"
+              exposure: "{{ states(exposure_entity) }}"
+              sensitivity: "{{ states(weather_sensitivity_entity) }}"
+              failure_action: "{{ states(sensor_failure_entity) }}"
+              rain_limit: "{{ states(rain_threshold_entity) | float(2) }}"
+              weather_condition: "{{ states(weather_entity) }}"
+              temperature: "{{ state_attr(weather_entity, 'temperature') | float(25) }}"
+              humidity: "{{ state_attr(weather_entity, 'humidity') | float(50) }}"
+              wind_speed: "{{ state_attr(weather_entity, 'wind_speed') | float(0) }}"
+              forecast_items: "{{ watering_weather[weather_entity].forecast | default([]) }}"
+          - variables:
+              valid_count: "{{ (1 if m1_valid else 0) + (1 if m2_valid else 0) }}"
+              moisture_average: >-
+                {% if m1_valid and m2_valid %}{{ (m1 + m2) / 2 }}
+                {% elif m1_valid %}{{ m1 }}
+                {% elif m2_valid %}{{ m2 }}
+                {% else %}0{% endif %}
+              any_saturated: "{{ (m1_valid and m1 >= saturated) or (m2_valid and m2 >= saturated) }}"
+              both_dry: "{{ m1_valid and m2_valid and m1 <= dry and m2 <= dry }}"
+              all_wet: "{{ valid_count > 0 and (not m1_valid or m1 >= wet) and (not m2_valid or m2 >= wet) }}"
+              sensor_conflict: >-
+                {{ m1_valid and m2_valid and
+                   ((m1 <= dry and m2 >= wet) or (m2 <= dry and m1 >= wet)) }}
+              exposure_factor: >-
+                {% if exposure == 'Εκτεθειμένο' %}1
+                {% elif exposure == 'Μερικώς στεγασμένο' %}0.4
+                {% else %}0{% endif %}
+              forecast_rain: >-
+                {% set ns = namespace(total=0) %}
+                {% for item in forecast_items[:6] %}
+                  {% set ns.total = ns.total + (item.precipitation | default(0) | float(0)) %}
+                {% endfor %}
+                {{ ns.total }}
+              cloud_adjustment: >-
+                {% if weather_condition in ['sunny', 'clear-night'] %}0.08
+                {% elif weather_condition == 'partlycloudy' %}0
+                {% elif weather_condition in ['cloudy', 'fog'] %}-0.08
+                {% elif weather_condition in ['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy'] %}-0.15
+                {% else %}0{% endif %}
+              sensitivity_weight: >-
+                {% if sensitivity == 'Χαμηλή' %}0.5
+                {% elif sensitivity == 'Υψηλή' %}1.4
+                {% else %}1{% endif %}
+          - variables:
+              effective_forecast_rain: "{{ forecast_rain | float(0) * exposure_factor | float(0) }}"
+              raw_weather_factor: >-
+                {{ 1 + ((temperature - 25) * 0.018) + ((50 - humidity) * 0.0025) +
+                   (([wind_speed - 10, 0] | max) * 0.004) + (cloud_adjustment | float(0)) }}
+              moisture_factor: >-
+                {% if valid_count == 0 %}1
+                {% else %}
+                  {{ [[(wet - moisture_average) / ([wet - dry, 1] | max), 0] | max, 1.25] | min }}
+                {% endif %}
+          - variables:
+              weather_factor: >-
+                {{ [[1 + ((raw_weather_factor - 1) * sensitivity_weight), 0.70] | max, 1.40] | min }}
+              calculated_raw: >-
+                {% if valid_count == 0 and failure_action == 'Ακύρωση' %}0
+                {% elif any_saturated %}0
+                {% elif sensor_conflict %}{{ ideal * conflict_ratio }}
+                {% elif all_wet %}0
+                {% elif effective_forecast_rain >= rain_limit and not both_dry %}0
+                {% elif valid_count == 0 %}{{ ideal * weather_factor * 0.60 }}
+                {% else %}{{ ideal * moisture_factor * weather_factor }}{% endif %}
+          - variables:
+              run_minutes: >-
+                {% if calculated_raw | float(0) <= 0 %}0
+                {% else %}{{ [[calculated_raw | float(0), minimum] | max, maximum] | min | round(0) | int }}{% endif %}
+              decision_reason: >-
+                {% if valid_count == 0 and failure_action == 'Ακύρωση' %}Ακυρώθηκε · οι δύο αισθητήρες δεν είναι διαθέσιμοι
+                {% elif any_saturated %}Ακυρώθηκε · αισθητήρας πάνω από το όριο ασφαλείας
+                {% elif sensor_conflict %}Σύντομο πότισμα · διαφωνία αισθητήρων
+                {% elif all_wet %}Ακυρώθηκε · επαρκής υγρασία χώματος
+                {% elif effective_forecast_rain >= rain_limit and not both_dry %}Αναβλήθηκε · πρόβλεψη {{ effective_forecast_rain | round(1) }} mm
+                {% elif valid_count == 0 %}Περιορισμένο πότισμα από τον καιρό · χωρίς αισθητήρες
+                {% elif valid_count == 1 %}Πότισμα με έναν αισθητήρα · {{ run_minutes }} λεπτά
+                {% else %}Auto · υγρασία {{ moisture_average | round(0) }}% · {{ run_minutes }} λεπτά{% endif %}
+          - action: input_number.set_value
+            target:
+              entity_id: "{{ auto_duration_entity }}"
+            data:
+              value: "{{ run_minutes }}"
+          - action: input_text.set_value
+            target:
+              entity_id: "{{ reason_entity }}"
+            data:
+              value: "{{ decision_reason }}"
+          - if:
+              - condition: template
+                value_template: "{{ sensor_conflict or valid_count < 2 }}"
+            then:
+              - action: persistent_notification.create
+                data:
+                  notification_id: "{{ valve_entity | replace('.', '_') }}_sensor_warning"
+                  title: "Πότισμα · {{ zone_name }}"
+                  message: "{{ decision_reason }}"
+          - condition: template
+            value_template: "{{ run_minutes | int(0) > 0 }}"
+          - action: homeassistant.turn_on
+            target:
+              entity_id: "{{ valve_entity }}"
+          - delay:
+              minutes: "{{ run_minutes }}"
+          - action: homeassistant.turn_off
+            target:
+              entity_id: "{{ valve_entity }}"
+
+automation:
+  - id: watering_front_balcony_schedule
+    alias: Watering - front balcony schedule
+    mode: single
+    triggers:
+      - trigger: time
+        at: input_datetime.watering_front_balcony_start_time
+    conditions:
+      - condition: state
+        entity_id: input_boolean.watering_front_balcony
+        state: "on"
+      - condition: template
+        value_template: >-
+          {% set mask = states('input_number.watering_front_balcony_days') | int(0) %}
+          {{ (mask | bitwise_and(2 ** now().weekday())) > 0 }}
+    actions:
+      - action: script.watering_auto_run_zone
+        data:
+          zone_name: Μπροστινό μπαλκόνι
+          valve_entity: switch.watering_front_balcony
+          mode_entity: input_select.watering_front_balcony_mode
+          manual_duration_entity: input_number.watering_front_balcony_duration
+          moisture_entity_1: sensor.watering_front_balcony_moisture_1
+          moisture_entity_2: sensor.watering_front_balcony_moisture_2
+          dry_threshold_entity: input_number.watering_front_balcony_dry_threshold
+          wet_threshold_entity: input_number.watering_front_balcony_wet_threshold
+          saturation_threshold_entity: input_number.watering_front_balcony_saturation_threshold
+          ideal_duration_entity: input_number.watering_front_balcony_ideal_duration
+          conflict_percentage_entity: input_number.watering_front_balcony_conflict_percentage
+          min_duration_entity: input_number.watering_front_balcony_min_duration
+          max_duration_entity: input_number.watering_front_balcony_max_duration
+          exposure_entity: input_select.watering_front_balcony_exposure
+          weather_sensitivity_entity: input_select.watering_front_balcony_weather_sensitivity
+          sensor_failure_entity: input_select.watering_front_balcony_sensor_failure
+          rain_threshold_entity: input_number.watering_front_balcony_rain_threshold
+          auto_duration_entity: input_number.watering_front_balcony_auto_duration
+          reason_entity: input_text.watering_front_balcony_auto_reason
+          weather_entity: weather.openweathermap
+
+  - id: watering_back_balcony_schedule
+    alias: Watering - back balcony schedule
+    mode: single
+    triggers:
+      - trigger: time
+        at: input_datetime.watering_back_balcony_start_time
+    conditions:
+      - condition: state
+        entity_id: input_boolean.watering_back_balcony
+        state: "on"
+      - condition: template
+        value_template: >-
+          {% set mask = states('input_number.watering_back_balcony_days') | int(0) %}
+          {{ (mask | bitwise_and(2 ** now().weekday())) > 0 }}
+    actions:
+      - action: script.watering_auto_run_zone
+        data:
+          zone_name: Πίσω μπαλκόνι
+          valve_entity: switch.watering_back_balcony
+          mode_entity: input_select.watering_back_balcony_mode
+          manual_duration_entity: input_number.watering_back_balcony_duration
+          moisture_entity_1: sensor.watering_back_balcony_moisture_1
+          moisture_entity_2: sensor.watering_back_balcony_moisture_2
+          dry_threshold_entity: input_number.watering_back_balcony_dry_threshold
+          wet_threshold_entity: input_number.watering_back_balcony_wet_threshold
+          saturation_threshold_entity: input_number.watering_back_balcony_saturation_threshold
+          ideal_duration_entity: input_number.watering_back_balcony_ideal_duration
+          conflict_percentage_entity: input_number.watering_back_balcony_conflict_percentage
+          min_duration_entity: input_number.watering_back_balcony_min_duration
+          max_duration_entity: input_number.watering_back_balcony_max_duration
+          exposure_entity: input_select.watering_back_balcony_exposure
+          weather_sensitivity_entity: input_select.watering_back_balcony_weather_sensitivity
+          sensor_failure_entity: input_select.watering_back_balcony_sensor_failure
+          rain_threshold_entity: input_number.watering_back_balcony_rain_threshold
+          auto_duration_entity: input_number.watering_back_balcony_auto_duration
+          reason_entity: input_text.watering_back_balcony_auto_reason
+          weather_entity: weather.openweathermap

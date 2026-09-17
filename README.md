@@ -1,6 +1,6 @@
 # Watering Scheduler Card
 
-Mobile-friendly Home Assistant dashboard card for choosing watering days, start time, duration, Manual/Auto mode and enabled state. Auto mode displays the current temperature and translated weather condition. The card can also show the 10 most recent watering runs from Home Assistant history.
+Mobile-friendly Home Assistant dashboard card for choosing watering days, start time, duration, Manual/Auto mode and enabled state. Auto mode uses two soil-moisture sensors, weather adjustment, rain exposure and safety limits. The card can also show the 10 most recent watering runs from Home Assistant history.
 
 The seven selected days are stored as a single number from `0` to `127`, so each watering controller needs only one additional helper.
 
@@ -61,6 +61,21 @@ time_entity: input_datetime.watering_front_balcony_start_time
 duration_entity: input_number.watering_front_balcony_duration
 weather_entity: weather.openweathermap
 log_entity: switch.watering_front_balcony
+moisture_entity_1: sensor.watering_front_balcony_moisture_1
+moisture_entity_2: sensor.watering_front_balcony_moisture_2
+dry_threshold_entity: input_number.watering_front_balcony_dry_threshold
+wet_threshold_entity: input_number.watering_front_balcony_wet_threshold
+saturation_threshold_entity: input_number.watering_front_balcony_saturation_threshold
+ideal_duration_entity: input_number.watering_front_balcony_ideal_duration
+conflict_percentage_entity: input_number.watering_front_balcony_conflict_percentage
+min_duration_entity: input_number.watering_front_balcony_min_duration
+max_duration_entity: input_number.watering_front_balcony_max_duration
+exposure_entity: input_select.watering_front_balcony_exposure
+weather_sensitivity_entity: input_select.watering_front_balcony_weather_sensitivity
+sensor_failure_entity: input_select.watering_front_balcony_sensor_failure
+rain_threshold_entity: input_number.watering_front_balcony_rain_threshold
+auto_duration_entity: input_number.watering_front_balcony_auto_duration
+decision_entity: input_text.watering_front_balcony_auto_reason
 language: el
 ```
 
@@ -77,10 +92,53 @@ time_entity: input_datetime.watering_back_balcony_start_time
 duration_entity: input_number.watering_back_balcony_duration
 weather_entity: weather.openweathermap
 log_entity: switch.watering_back_balcony
+moisture_entity_1: sensor.watering_back_balcony_moisture_1
+moisture_entity_2: sensor.watering_back_balcony_moisture_2
+dry_threshold_entity: input_number.watering_back_balcony_dry_threshold
+wet_threshold_entity: input_number.watering_back_balcony_wet_threshold
+saturation_threshold_entity: input_number.watering_back_balcony_saturation_threshold
+ideal_duration_entity: input_number.watering_back_balcony_ideal_duration
+conflict_percentage_entity: input_number.watering_back_balcony_conflict_percentage
+min_duration_entity: input_number.watering_back_balcony_min_duration
+max_duration_entity: input_number.watering_back_balcony_max_duration
+exposure_entity: input_select.watering_back_balcony_exposure
+weather_sensitivity_entity: input_select.watering_back_balcony_weather_sensitivity
+sensor_failure_entity: input_select.watering_back_balcony_sensor_failure
+rain_threshold_entity: input_number.watering_back_balcony_rain_threshold
+auto_duration_entity: input_number.watering_back_balcony_auto_duration
+decision_entity: input_text.watering_back_balcony_auto_reason
 language: el
 ```
 
 Replace the entity IDs with the actual IDs used by your Home Assistant.
+
+## Auto package
+
+Copy `watering_auto_package.yaml` to:
+
+```text
+/config/packages/watering_auto_package.yaml
+```
+
+Make sure `configuration.yaml` contains:
+
+```yaml
+homeassistant:
+  packages: !include_dir_named packages
+```
+
+Then restart Home Assistant. The package creates the Auto settings for both balconies and the two scheduled automations. It assumes these sensor IDs:
+
+```text
+sensor.watering_front_balcony_moisture_1
+sensor.watering_front_balcony_moisture_2
+sensor.watering_back_balcony_moisture_1
+sensor.watering_back_balcony_moisture_2
+```
+
+`Ideal dry-to-wet duration` is the calibrated number of minutes required to bring dry soil to the desired wet level. Auto uses it as its default duration, then adjusts it from soil moisture and weather. If one sensor is dry and the other wet, it runs the configured conflict percentage and creates a warning.
+
+Rain forecasts only postpone watering when the soil is not already dry. `Πλήρως στεγασμένο` ignores rain, `Μερικώς στεγασμένο` counts 40%, and `Εκτεθειμένο` counts 100%.
 
 ## Automation condition
 

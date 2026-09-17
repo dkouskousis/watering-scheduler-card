@@ -1,4 +1,4 @@
-const CARD_VERSION = "1.1.1";
+const CARD_VERSION = "1.2.0";
 
 class WateringSchedulerCard extends HTMLElement {
   static getStubConfig() {
@@ -12,6 +12,21 @@ class WateringSchedulerCard extends HTMLElement {
       duration_entity: "input_number.watering_front_balcony_duration",
       weather_entity: "weather.openweathermap",
       log_entity: "switch.watering_front_balcony",
+      moisture_entity_1: "sensor.watering_front_balcony_moisture_1",
+      moisture_entity_2: "sensor.watering_front_balcony_moisture_2",
+      dry_threshold_entity: "input_number.watering_front_balcony_dry_threshold",
+      wet_threshold_entity: "input_number.watering_front_balcony_wet_threshold",
+      saturation_threshold_entity: "input_number.watering_front_balcony_saturation_threshold",
+      ideal_duration_entity: "input_number.watering_front_balcony_ideal_duration",
+      conflict_percentage_entity: "input_number.watering_front_balcony_conflict_percentage",
+      min_duration_entity: "input_number.watering_front_balcony_min_duration",
+      max_duration_entity: "input_number.watering_front_balcony_max_duration",
+      exposure_entity: "input_select.watering_front_balcony_exposure",
+      weather_sensitivity_entity: "input_select.watering_front_balcony_weather_sensitivity",
+      sensor_failure_entity: "input_select.watering_front_balcony_sensor_failure",
+      rain_threshold_entity: "input_number.watering_front_balcony_rain_threshold",
+      auto_duration_entity: "input_number.watering_front_balcony_auto_duration",
+      decision_entity: "input_text.watering_front_balcony_auto_reason",
       language: "el",
     };
   }
@@ -65,6 +80,24 @@ class WateringSchedulerCard extends HTMLElement {
         start: "Start time",
         duration: "Duration",
         baseDuration: "Base duration",
+        calculatedDuration: "Calculated duration",
+        lastDecision: "Last Auto decision",
+        autoSettings: "Auto settings",
+        moistureSensors: "Soil moisture",
+        sensorOne: "Sensor 1",
+        sensorTwo: "Sensor 2",
+        dryThreshold: "Dry threshold",
+        wetThreshold: "Wet threshold",
+        saturationThreshold: "Safety wet limit",
+        idealDuration: "Ideal dry-to-wet duration",
+        idealDurationHelp: "The default watering time when the soil is dry",
+        conflictPercentage: "Conflict watering",
+        minDuration: "Minimum duration",
+        maxDuration: "Maximum duration",
+        exposure: "Rain exposure",
+        weatherSensitivity: "Weather sensitivity",
+        sensorFailure: "Sensor failure action",
+        rainThreshold: "Rain postponement threshold",
         next: "Next watering",
         none: "No watering days selected",
         missing: "Entity not found",
@@ -88,6 +121,24 @@ class WateringSchedulerCard extends HTMLElement {
       start: "Ώρα έναρξης",
       duration: "Διάρκεια",
       baseDuration: "Βασική διάρκεια",
+      calculatedDuration: "Υπολογισμένη διάρκεια",
+      lastDecision: "Τελευταία απόφαση Auto",
+      autoSettings: "Ρυθμίσεις Auto",
+      moistureSensors: "Υγρασία χώματος",
+      sensorOne: "Αισθητήρας 1",
+      sensorTwo: "Αισθητήρας 2",
+      dryThreshold: "Όριο στεγνού χώματος",
+      wetThreshold: "Όριο υγρού χώματος",
+      saturationThreshold: "Όριο ασφαλείας υγρασίας",
+      idealDuration: "Ιδανικός χρόνος στεγνό → υγρό",
+      idealDurationHelp: "Ο βασικός χρόνος ποτίσματος όταν το χώμα είναι στεγνό",
+      conflictPercentage: "Πότισμα σε διαφωνία",
+      minDuration: "Ελάχιστη διάρκεια",
+      maxDuration: "Μέγιστη διάρκεια",
+      exposure: "Έκθεση στη βροχή",
+      weatherSensitivity: "Ευαισθησία στον καιρό",
+      sensorFailure: "Αν χαθούν οι αισθητήρες",
+      rainThreshold: "Όριο αναβολής λόγω βροχής",
       next: "Επόμενο πότισμα",
       none: "Δεν έχει επιλεγεί ημέρα",
       missing: "Δεν βρέθηκε το entity",
@@ -191,6 +242,91 @@ class WateringSchedulerCard extends HTMLElement {
     if (temperature !== undefined && temperature !== null) parts.push(`${temperature}${unit}`);
     if (conditions[condition]) parts.push(conditions[condition]);
     return parts.join(" · ");
+  }
+
+  _displayState(entityId, suffix = "") {
+    const state = this._state(entityId);
+    if (!state || ["unknown", "unavailable"].includes(state.state)) return "—";
+    return `${state.state}${suffix}`;
+  }
+
+  _numberSetting(entityId, label, suffix = "") {
+    const state = this._state(entityId);
+    if (!state) return "";
+    const min = Number(state.attributes.min ?? 0);
+    const max = Number(state.attributes.max ?? 100);
+    const step = Number(state.attributes.step ?? 1);
+    return `
+      <label class="auto-setting">
+        <span>${label}</span>
+        <strong data-setting-value="${entityId}">${state.state}${suffix}</strong>
+        <input class="auto-number" data-entity="${entityId}" data-suffix="${suffix}" type="range" min="${min}" max="${max}" step="${step}" value="${state.state}">
+      </label>
+    `;
+  }
+
+  _selectSetting(entityId, label) {
+    const state = this._state(entityId);
+    if (!state) return "";
+    const options = Array.isArray(state.attributes.options) ? state.attributes.options : [];
+    return `
+      <label class="auto-select-setting">
+        <span>${label}</span>
+        <select class="auto-select" data-entity="${entityId}">
+          ${options.map((option) => `<option value="${option}" ${option === state.state ? "selected" : ""}>${option}</option>`).join("")}
+        </select>
+      </label>
+    `;
+  }
+
+  _autoSettingsMarkup() {
+    const labels = this._labels();
+    const config = this._config;
+    if (!config.moisture_entity_1 && !config.moisture_entity_2) return "";
+    const moistureOne = this._displayState(config.moisture_entity_1, "%");
+    const moistureTwo = this._displayState(config.moisture_entity_2, "%");
+    const calculated = this._displayState(config.auto_duration_entity, ` ${labels.minutes}`);
+    const decision = this._displayState(config.decision_entity);
+
+    return `
+      <div class="auto-status-grid">
+        <div class="auto-status"><span>${labels.sensorOne}</span><strong>${moistureOne}</strong></div>
+        <div class="auto-status"><span>${labels.sensorTwo}</span><strong>${moistureTwo}</strong></div>
+        <div class="auto-status"><span>${labels.calculatedDuration}</span><strong>${calculated}</strong></div>
+      </div>
+      <div class="auto-decision"><ha-icon icon="mdi:brain"></ha-icon><div><span>${labels.lastDecision}</span><strong>${decision}</strong></div></div>
+      <details class="auto-settings">
+        <summary><ha-icon icon="mdi:tune-variant"></ha-icon>${labels.autoSettings}</summary>
+        <div class="auto-settings-body">
+          ${this._numberSetting(config.ideal_duration_entity, labels.idealDuration, ` ${labels.minutes}`)}
+          <div class="setting-help">${labels.idealDurationHelp}</div>
+          ${this._numberSetting(config.dry_threshold_entity, labels.dryThreshold, "%")}
+          ${this._numberSetting(config.wet_threshold_entity, labels.wetThreshold, "%")}
+          ${this._numberSetting(config.saturation_threshold_entity, labels.saturationThreshold, "%")}
+          ${this._numberSetting(config.conflict_percentage_entity, labels.conflictPercentage, "%")}
+          ${this._numberSetting(config.min_duration_entity, labels.minDuration, ` ${labels.minutes}`)}
+          ${this._numberSetting(config.max_duration_entity, labels.maxDuration, ` ${labels.minutes}`)}
+          ${this._numberSetting(config.rain_threshold_entity, labels.rainThreshold, " mm")}
+          ${this._selectSetting(config.exposure_entity, labels.exposure)}
+          ${this._selectSetting(config.weather_sensitivity_entity, labels.weatherSensitivity)}
+          ${this._selectSetting(config.sensor_failure_entity, labels.sensorFailure)}
+        </div>
+      </details>
+    `;
+  }
+
+  async _setNumberEntity(entityId, value) {
+    await this._hass.callService("input_number", "set_value", {
+      entity_id: entityId,
+      value: Number(value),
+    });
+  }
+
+  async _setSelectEntity(entityId, value) {
+    await this._hass.callService("input_select", "select_option", {
+      entity_id: entityId,
+      option: value,
+    });
   }
 
   async _toggleDay(index) {
@@ -384,17 +520,25 @@ class WateringSchedulerCard extends HTMLElement {
           `).join("")}
         </div>
 
-        <div class="control-grid">
+        <div class="control-grid ${isAuto ? "auto-control-grid" : ""}">
           <label class="control">
             <span><ha-icon icon="mdi:clock-outline"></ha-icon>${labels.start}</span>
             <input id="start-time" type="time" value="${time}">
           </label>
-          <label class="control duration-control">
-            <span><ha-icon icon="mdi:timer-outline"></ha-icon>${isAuto ? labels.baseDuration : labels.duration}</span>
-            <strong id="duration-value">${duration} ${this._config.duration_unit || labels.minutes}</strong>
-            <input id="duration" type="range" min="${min}" max="${max}" step="${step}" value="${duration}">
-          </label>
+          ${isAuto ? `
+            <div class="control calculated-control">
+              <span><ha-icon icon="mdi:timer-cog-outline"></ha-icon>${labels.calculatedDuration}</span>
+              <strong>${this._displayState(this._config.auto_duration_entity, ` ${labels.minutes}`)}</strong>
+            </div>
+          ` : `
+            <label class="control duration-control">
+              <span><ha-icon icon="mdi:timer-outline"></ha-icon>${labels.duration}</span>
+              <strong id="duration-value">${duration} ${this._config.duration_unit || labels.minutes}</strong>
+              <input id="duration" type="range" min="${min}" max="${max}" step="${step}" value="${duration}">
+            </label>
+          `}
         </div>
+        ${isAuto ? this._autoSettingsMarkup() : ""}
         ${this._historyMarkup()}
       </ha-card>
       ${this._styles()}
@@ -408,6 +552,14 @@ class WateringSchedulerCard extends HTMLElement {
       this.querySelector("#duration-value").textContent = `${event.target.value} ${this._config.duration_unit || labels.minutes}`;
     });
     durationInput?.addEventListener("change", (event) => this._setDuration(event.target.value));
+    this.querySelectorAll(".auto-number").forEach((input) => {
+      input.addEventListener("input", (event) => {
+        const value = this.querySelector(`[data-setting-value="${event.target.dataset.entity}"]`);
+        if (value) value.textContent = `${event.target.value}${event.target.dataset.suffix || ""}`;
+      });
+      input.addEventListener("change", (event) => this._setNumberEntity(event.target.dataset.entity, event.target.value));
+    });
+    this.querySelectorAll(".auto-select").forEach((select) => select.addEventListener("change", (event) => this._setSelectEntity(event.target.dataset.entity, event.target.value)));
     this.querySelector("#enabled")?.addEventListener("change", () => this._toggleEnabled());
     this.querySelector("#refresh-history")?.addEventListener("click", () => {
       this._lastHistoryFetch = 0;
@@ -448,6 +600,29 @@ class WateringSchedulerCard extends HTMLElement {
         .duration-control { display:grid; grid-template-columns:1fr auto; align-items:center; column-gap:12px; }
         .duration-control strong { color:var(--primary-text-color); font-size:14px; font-weight:600; }
         .duration-control input { grid-column:1/-1; width:100%; min-height:28px; accent-color:var(--primary-color); cursor:pointer; }
+        .calculated-control { display:flex; flex-direction:column; justify-content:center; min-height:46px; padding:0 14px; border:1px solid var(--divider-color); border-radius:12px; background:var(--secondary-background-color); }
+        .calculated-control span { margin-bottom:3px; }
+        .calculated-control strong { color:var(--primary-text-color); font-size:18px; }
+        .auto-status-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:18px; }
+        .auto-status { min-width:0; padding:11px; border-radius:12px; background:var(--secondary-background-color); text-align:center; }
+        .auto-status span { display:block; overflow:hidden; color:var(--secondary-text-color); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+        .auto-status strong { display:block; margin-top:4px; color:var(--primary-text-color); font-size:16px; }
+        .auto-decision { display:flex; align-items:flex-start; gap:9px; margin:10px 2px 0; padding:10px 12px; border-radius:12px; background:color-mix(in srgb,var(--primary-color) 8%,transparent); }
+        .auto-decision ha-icon { --mdc-icon-size:19px; color:var(--primary-color); margin-top:2px; }
+        .auto-decision span,.auto-decision strong { display:block; }
+        .auto-decision span { color:var(--secondary-text-color); font-size:11px; }
+        .auto-decision strong { margin-top:2px; color:var(--primary-text-color); font-size:12px; line-height:1.35; }
+        .auto-settings { margin-top:10px; border:1px solid var(--divider-color); border-radius:13px; overflow:hidden; }
+        .auto-settings summary { display:flex; align-items:center; gap:8px; padding:12px 14px; color:var(--primary-text-color); font-size:13px; font-weight:600; cursor:pointer; list-style:none; }
+        .auto-settings summary::-webkit-details-marker { display:none; }
+        .auto-settings summary ha-icon { --mdc-icon-size:19px; color:var(--primary-color); }
+        .auto-settings-body { display:grid; gap:14px; padding:4px 14px 15px; }
+        .auto-setting { display:grid; grid-template-columns:1fr auto; align-items:center; gap:8px 12px; color:var(--secondary-text-color); font-size:12px; }
+        .auto-setting strong { color:var(--primary-text-color); font-size:12px; }
+        .auto-setting input { grid-column:1/-1; width:100%; accent-color:var(--primary-color); }
+        .setting-help { margin-top:-10px; color:var(--secondary-text-color); font-size:11px; line-height:1.35; }
+        .auto-select-setting { display:grid; grid-template-columns:1fr minmax(130px,auto); align-items:center; gap:12px; color:var(--secondary-text-color); font-size:12px; }
+        .auto-select-setting select { min-height:38px; max-width:190px; padding:7px 9px; border:1px solid var(--divider-color); border-radius:10px; background:var(--secondary-background-color); color:var(--primary-text-color); font:inherit; }
         .history-section { margin:20px -20px -20px; padding:17px 20px 10px; border-top:1px solid var(--divider-color); background:color-mix(in srgb,var(--secondary-background-color) 45%,transparent); }
         .history-header { justify-content:space-between; color:var(--primary-text-color); font-size:14px; font-weight:600; margin-bottom:7px; }
         .history-header button { width:36px; height:36px; border:0; border-radius:50%; background:transparent; color:var(--secondary-text-color); cursor:pointer; }
@@ -465,6 +640,10 @@ class WateringSchedulerCard extends HTMLElement {
           .days { gap:5px; }
           .day { min-height:42px; border-radius:12px; }
           .control-grid { grid-template-columns:1fr; gap:16px; }
+          .auto-status { padding:9px 5px; }
+          .auto-status span { font-size:10px; }
+          .auto-select-setting { grid-template-columns:1fr; gap:6px; }
+          .auto-select-setting select { width:100%; max-width:none; }
           .history-section { margin:18px -16px -16px; padding:15px 16px 8px; }
         }
       </style>
