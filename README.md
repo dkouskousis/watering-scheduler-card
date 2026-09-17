@@ -1,6 +1,6 @@
 # Watering Scheduler Card
 
-Mobile-friendly Home Assistant dashboard card for choosing watering days, start time, duration and enabled state.
+Mobile-friendly Home Assistant dashboard card for choosing watering days, start time, duration, Manual/Auto mode and enabled state. It can also show the 10 most recent watering runs from Home Assistant history.
 
 The seven selected days are stored as a single number from `0` to `127`, so each watering controller needs only one additional helper.
 
@@ -30,7 +30,21 @@ input_number.watering_front_balcony_days
 input_number.watering_back_balcony_days
 ```
 
-The card also uses the existing Time, Duration and Enabled helpers.
+Create one Dropdown helper for each balcony with exactly these two options:
+
+```text
+Manual
+Auto
+```
+
+Suggested entity IDs:
+
+```yaml
+input_select.watering_front_balcony_mode
+input_select.watering_back_balcony_mode
+```
+
+The card also uses the existing Time, Duration and Enabled helpers. In Auto mode, Duration is treated as the base duration that the automation adjusts using the weather forecast.
 
 ## Dashboard configuration
 
@@ -41,9 +55,12 @@ type: custom:watering-scheduler-card
 title: Πότισμα μπροστινού μπαλκονιού
 icon: mdi:sprinkler-variant
 enabled_entity: input_boolean.watering_front_balcony
+mode_entity: input_select.watering_front_balcony_mode
 days_entity: input_number.watering_front_balcony_days
 time_entity: input_datetime.watering_front_balcony_start_time
 duration_entity: input_number.watering_front_balcony_duration
+weather_entity: weather.openweathermap
+log_entity: switch.watering_front_balcony
 language: el
 ```
 
@@ -54,9 +71,12 @@ type: custom:watering-scheduler-card
 title: Πότισμα πίσω μπαλκονιού
 icon: mdi:sprinkler-variant
 enabled_entity: input_boolean.watering_back_balcony
+mode_entity: input_select.watering_back_balcony_mode
 days_entity: input_number.watering_back_balcony_days
 time_entity: input_datetime.watering_back_balcony_start_time
 duration_entity: input_number.watering_back_balcony_duration
+weather_entity: weather.openweathermap
+log_entity: switch.watering_back_balcony
 language: el
 ```
 
@@ -94,6 +114,11 @@ Bit values are Monday `1`, Tuesday `2`, Wednesday `4`, Thursday `8`, Friday `16`
 | `time_entity` | Yes | Time helper |
 | `duration_entity` | Yes | Number helper used for watering duration |
 | `enabled_entity` | No | Toggle helper used as master enable switch |
+| `mode_entity` | No | Dropdown helper with `Manual` and `Auto` options |
+| `weather_entity` | No | Weather entity displayed in Auto mode |
+| `log_entity` | No | Gardena valve/switch whose history is used for the last 10 runs |
+| `log_days` | No | Number of history days to search; default `90` |
+| `active_states` | No | States treated as running; default `on`, `open`, `opening` |
 | `title` | No | Card title |
 | `icon` | No | Material Design icon |
 | `language` | No | `el` or `en` |
